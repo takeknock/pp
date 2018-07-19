@@ -1,55 +1,60 @@
+import pandas as pd
+import numpy as np
 from bs4 import BeautifulSoup
 import requests
-from selenium import webdriver
+import os
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as ec
+
+
+import driver_factory
+
 
 LANDMLIT_URL = 'http://www.land.mlit.go.jp/webland/download.html'
-CHROME = 'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'
-CHROMEDRIVER = 'C:\Program Files (x86)\Google\chromedriver_win32\chromedriver.exe'
 LANDMLIT_SERVLET_URL = 'http://www.land.mlit.go.jp/webland/servlet/DownloadServlet'
 
-def create_driver():
-    options = Options()
-    options.binary_location = CHROME
-    options.add_argument('--headless')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--ignore-certificate-errors')
-    options.add_argument('--allow-running-insecure-content')
-    options.add_argument('--disable-web-security')
-    options.add_argument('--lang=ja')
-    options.add_argument('--blink-settings=imagesEnabled=false')
-    driver = webdriver.Chrome(chrome_options=options)
-    driver.get(LANDMLIT_SERVLET_URL)
-    driver_wait = WebDriverWait(driver, 10)
-    driver_wait.until(ec.presence_of_all_elements_located)
-    return driver
+INPUT_FOLDER = os.path.join('..', '..', 'input')
 
-def get_from_list(driver):
+
+def fetch_from_list(driver):
     id_ = "TDIDFrom"
-    from_list = get_by_id(driver, id_)
+    from_list = fetch_by_id(driver, id_)
     return from_list
 
-def get_to_list(driver):
+def fetch_to_list(driver):
     id_ = "TDIDTo"
-    to_list = get_by_id(driver, id_)
+    to_list = fetch_by_id(driver, id_)
     return to_list
 
-def get_prefecture_list(driver):
+def fetch_prefecture_list(driver):
     id_ = "TDK"
-    prefecture_list = get_by_id(driver, id_)
+    prefecture_list = fetch_by_id(driver, id_)
     return prefecture_list
 
-def get_city_list(driver):
+def fetch_city_list(driver):
     id_ = "SKC"
-    city_list = get_by_id(driver, id_)
+    city_list = fetch_by_id(driver, id_)
     return city_list
 
 
-def get_by_id(driver, id_):
+def fetch_by_id(driver, id_):
     return driver.find_element_by_id(id_).text.replace(" ", "").split("\n")
+
+def to_dataframe(list):
+    return pd.DataFrame(list)
+
+def save(driver):
+    from_list = fetch_from_list(driver)
+    from_list_df = to_dataframe(from_list)
+    from_list_df.to_csv(os.path.join(INPUT_FOLDER, 'realestate', 'from.csv'), encoding='shift_jis', index=False)
+    to_list = fetch_to_list(driver)
+    to_list_df = to_dataframe(to_list)
+    to_list_df.to_csv(os.path.join(INPUT_FOLDER, 'realestate', 'to.csv'), encoding='shift_jis', index=False)
+    prefecture_list = fetch_prefecture_list(driver)
+    prefecture_list_df = to_dataframe(prefecture_list)
+    prefecture_list_df.to_csv(os.path.join(INPUT_FOLDER, 'realestate', 'prefecture.csv'), encoding='shift_jis', index=False)
+    city_list = fetch_city_list(driver)
+    city_list_df = to_dataframe(city_list)
+    city_list_df.to_csv(os.path.join(INPUT_FOLDER, 'realestate', 'city.csv'), encoding='shift_jis', index=False)
 
 def main():
     from_xpath = '//*[@id="TDIDFrom"]'
@@ -57,12 +62,16 @@ def main():
     prefecture_xpath = '//*[@id="TDK"]'
     city_xpath = '//*[@id="SKC"]'
 
-    driver = create_driver()
-    from_list = get_from_list(driver)
-    to_list = get_to_list(driver)
-    prefecture_list = get_prefecture_list(driver)
-    city_list = get_city_list(driver)
-    print(city_list)
+    prefecture_list = pd.read_csv(os.path.join(INPUT_FOLDER, 'realestate', 'prefecture.csv'), encoding='shift_jis')
+
+    for i in range(1, len(prefecture_list.index)):
+        driver = driver_factory.create(LANDMLIT_SERVLET_URL)
+        pref_element = driver.find_element_by_id("TDK")
+        pref = prefecture_list.iloc[i, 0]
+        print(pref)
+        pref_element.send_keys(pref)
+        city_list = to_dataframe(fetch_city_list(driver))
+        city_list.to_csv(os.path.join(INPUT_FOLDER, 'realestate', 'city', str(i)+'_city.csv'), encoding='shift_jis')
 
 if __name__ == "__main__":
     main()
